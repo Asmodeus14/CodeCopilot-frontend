@@ -2,14 +2,15 @@
 
 **AI-Powered Code Analysis & Optimization Platform**
 
-[![Frontend Deployment](https://img.shields.io/badge/Frontend-Vercel-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://codecopilot.vercel.app)
-[![Backend Deployment](https://img.shields.io/badge/Backend-Render-46B3A0?style=for-the-badge&logo=render&logoColor=white)](https://your-backend-url.render.com)
+[![Frontend Deployment](https://img.shields.io/badge/Frontend-Vercel-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://codecopilot0.vercel.app)
+[![Backend Deployment](https://img.shields.io/badge/Backend-Render-46B3A0?style=for-the-badge&logo=render&logoColor=white)](https://codecopilot-backend.onrender.com)
 ![React](https://img.shields.io/badge/React-18.2-61DAFB?style=for-the-badge&logo=react&logoColor=white)
 ![Flask](https://img.shields.io/badge/Flask-2.3-000000?style=for-the-badge&logo=flask&logoColor=white)
+![Backend](https://github.com/Asmodeus14/codecopilot-backend)
 
 ## 🌟 Live Demo
 
-**Frontend Application:** [https://codecopilot.vercel.app](https://codecopilot.vercel.app)
+**Frontend Application:** [https://codecopilot.vercel.app](https://codecopilot0.vercel.app)
 
 > **Note:** The backend service needs to be running locally or deployed separately for full functionality.
 
