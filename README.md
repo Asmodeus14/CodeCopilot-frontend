@@ -10,7 +10,7 @@
 
 ## 🌟 Live Demo
 
-**Frontend Application:** [https://codecopilot.vercel.app](https://codecopilot0.vercel.app)
+**Frontend Application:** [CodeCopilot](https://codecopilot0.vercel.app)
 
 > **Note:** The backend service needs to be running locally or deployed separately for full functionality.
 
