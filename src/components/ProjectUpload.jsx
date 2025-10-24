@@ -5,6 +5,7 @@ const ProjectUpload = ({ onAnalysisComplete }) => {
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [error, setError] = useState('');
     const [errorDetails, setErrorDetails] = useState('');
+    const [uploadProgress, setUploadProgress] = useState(0);
 
     // 🚀 MASSIVELY INCREASED FILE SIZE: 400MB
     const MAX_FILE_SIZE = 400 * 1024 * 1024; // 400MB
@@ -66,6 +67,7 @@ const ProjectUpload = ({ onAnalysisComplete }) => {
         setIsAnalyzing(true);
         setError('');
         setErrorDetails('');
+        setUploadProgress(0);
 
         const formData = new FormData();
         formData.append('file', file);
@@ -74,25 +76,31 @@ const ProjectUpload = ({ onAnalysisComplete }) => {
             const backendUrl = getBackendUrl();
             console.log('Uploading to:', `${backendUrl}/api/analyze`);
             
+            // 🎯 FIXED: Use fetch with proper promise handling
             const response = await fetch(`${backendUrl}/api/analyze`, {
                 method: 'POST',
                 body: formData,
             });
 
-            const data = await response.json();
-
-            if (!response.ok) {
-                // Handle structured backend errors
-                if (data.error && data.user_tip) {
-                    throw new Error(`${data.error}\n\n${data.user_tip}`);
-                } else if (data.error) {
-                    throw new Error(data.error);
+            if (response.ok) {
+                const data = await response.json();
+                onAnalysisComplete(data);
+            } else {
+                let errorData;
+                try {
+                    errorData = await response.json();
+                } catch {
+                    errorData = { error: `Analysis failed: ${response.status}` };
+                }
+                
+                if (errorData.error && errorData.user_tip) {
+                    throw new Error(`${errorData.error}\n\n${errorData.user_tip}`);
+                } else if (errorData.error) {
+                    throw new Error(errorData.error);
                 } else {
                     throw new Error(`Analysis failed: ${response.status}`);
                 }
             }
-
-            onAnalysisComplete(data);
         } catch (err) {
             console.error('Upload error:', err);
             const errorMessage = err.message || 'Failed to analyze project. Please try again.';
@@ -108,12 +116,13 @@ const ProjectUpload = ({ onAnalysisComplete }) => {
             }
 
             // Special handling for connection errors
-            if (err.message.includes('Failed to fetch')) {
+            if (err.message.includes('Cannot connect') || err.message.includes('Failed to fetch')) {
                 setError('Cannot connect to the analysis server');
                 setErrorDetails('Please make sure the backend is running on port 5000. Check that the server is started and accessible.');
             }
         } finally {
             setIsAnalyzing(false);
+            setUploadProgress(0);
         }
     };
 
@@ -124,6 +133,25 @@ const ProjectUpload = ({ onAnalysisComplete }) => {
         const i = Math.floor(Math.log(bytes) / Math.log(k));
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     };
+
+    // Quick start examples
+    const quickStartExamples = [
+        {
+            title: "Create ZIP on Windows",
+            command: "Right-click project folder → 'Send to' → 'Compressed folder'",
+            icon: "🪟"
+        },
+        {
+            title: "Create ZIP on Mac",
+            command: "Right-click project folder → 'Compress'",
+            icon: "🍎"
+        },
+        {
+            title: "Create ZIP via Terminal",
+            command: "zip -r project.zip .",
+            icon: "💻"
+        }
+    ];
 
     return (
         <div className="w-full max-w-2xl mx-auto">
@@ -141,20 +169,59 @@ const ProjectUpload = ({ onAnalysisComplete }) => {
                 {isAnalyzing ? (
                     <div className="flex flex-col items-center space-y-6">
                         <div className="relative">
-                            <div className="w-16 h-16 border-4 border-primary-500/30 rounded-full"></div>
-                            <div className="w-16 h-16 border-4 border-transparent border-t-primary-500 rounded-full absolute top-0 left-0 animate-spin-slow"></div>
+                            <div className="w-20 h-20 border-4 border-primary-500/20 rounded-full"></div>
+                            <div className="w-20 h-20 border-4 border-transparent border-t-primary-500 rounded-full absolute top-0 left-0 animate-spin-slow"></div>
+                            <div className="absolute inset-0 flex items-center justify-center">
+                                <span className="text-primary-400 font-bold text-lg">
+                                    {uploadProgress > 0 ? `${uploadProgress}%` : '⋯'}
+                                </span>
+                            </div>
                         </div>
-                        <div>
-                            <p className="text-xl font-semibold text-white mb-2">Analyzing your project</p>
-                            <p className="text-gray-400">Scanning for issues and optimization opportunities...</p>
-                            <p className="text-gray-500 text-sm mt-2">Large projects may take a bit longer to analyze</p>
+                        <div className="text-center">
+                            <p className="text-xl font-semibold text-white mb-2">
+                                Analyzing Your Project
+                            </p>
+                            <p className="text-gray-400 mb-3">
+                                Scanning for issues and generating insights...
+                            </p>
+                            
+                            {/* Simulated Progress Bar */}
+                            <div className="w-full bg-dark-600 rounded-full h-2 mt-4">
+                                <div 
+                                    className="bg-gradient-to-r from-primary-500 to-primary-600 h-2 rounded-full transition-all duration-300 ease-out animate-pulse"
+                                    style={{ width: '100%' }}
+                                ></div>
+                            </div>
+                            
+                            <p className="text-gray-500 text-sm mt-3">
+                                This may take a few moments for larger projects...
+                            </p>
                         </div>
                     </div>
                 ) : (
                     <>
                         <div className="text-6xl mb-6 opacity-80">📁</div>
                         <h3 className="text-2xl font-bold text-white mb-3">Upload Your Project</h3>
-                        <p className="text-gray-400 mb-8">Drag & drop your project ZIP file here</p>
+                        <p className="text-gray-400 mb-6">Drag & drop your project ZIP file here</p>
+                        
+                        {/* File Requirements */}
+                        <div className="bg-dark-700/50 rounded-lg p-4 mb-6 border border-dark-600">
+                            <div className="flex items-center justify-center space-x-6 text-sm text-gray-400">
+                                <div className="flex items-center space-x-2">
+                                    <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                    <span>.zip files only</span>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                    <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                    <span>Up to {formatFileSize(MAX_FILE_SIZE)}</span>
+                                </div>
+                            </div>
+                        </div>
+                        
                         <input
                             type="file"
                             id="file-input"
@@ -163,11 +230,11 @@ const ProjectUpload = ({ onAnalysisComplete }) => {
                             className="hidden"
                         />
                         <button 
-                            className="btn-primary"
+                            className="btn-primary text-lg px-8 py-4"
                             onClick={() => document.getElementById('file-input').click()}
                             type="button"
                         >
-                            Choose File
+                            Choose ZIP File
                         </button>
                     </>
                 )}
@@ -175,90 +242,144 @@ const ProjectUpload = ({ onAnalysisComplete }) => {
 
             {/* Error Message */}
             {error && (
-                <div className="mt-6 p-6 bg-red-500/10 border border-red-500/30 rounded-xl backdrop-blur-sm">
+                <div className="mt-6 p-6 bg-red-500/10 border border-red-500/30 rounded-xl backdrop-blur-sm animate-fade-in">
                     <div className="flex items-start space-x-3">
-                        <svg className="w-5 h-5 text-red-400 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                        </svg>
+                        <div className="flex-shrink-0 w-6 h-6 bg-red-500/20 rounded-full flex items-center justify-center mt-0.5">
+                            <svg className="w-3 h-3 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                            </svg>
+                        </div>
                         <div className="text-left">
                             <p className="text-red-300 font-semibold text-lg mb-2">{error}</p>
                             {errorDetails && (
-                                <p className="text-red-200/80 text-sm">{errorDetails}</p>
+                                <p className="text-red-200/80 text-sm leading-relaxed">{errorDetails}</p>
                             )}
+                            <button 
+                                className="mt-3 text-red-300 hover:text-red-200 text-sm underline transition-colors"
+                                onClick={() => { setError(''); setErrorDetails(''); }}
+                            >
+                                Dismiss
+                            </button>
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* Tips */}
+            {/* Quick Start Guide */}
             <div className="mt-8 card p-8 glass">
-                <h4 className="text-lg font-semibold text-white mb-4 flex items-center">
+                <h4 className="text-lg font-semibold text-white mb-6 flex items-center">
                     <svg className="w-5 h-5 mr-3 text-primary-400" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clipRule="evenodd" />
                     </svg>
-                    Perfect for Large Projects
+                    Quick Start Guide
                 </h4>
-                <ul className="space-y-3 text-gray-400">
-                    <li className="flex items-start">
-                        <span className="text-primary-400 mr-3 mt-1">•</span>
-                        <span>Zip your entire project folder (including package.json, assets, node_modules)</span>
-                    </li>
-                    <li className="flex items-start">
-                        <span className="text-primary-400 mr-3 mt-1">•</span>
-                        <span>Include all configuration files (tsconfig.json, .env, webpack.config.js, etc.)</span>
-                    </li>
-                    <li className="flex items-start">
-                        <span className="text-primary-400 mr-3 mt-1">•</span>
-                        <span>
-                            {/* 🚀 UPDATED SIZE IN TIPS: 400MB */}
-                            <strong className="text-white">Massive file support:</strong> Up to {formatFileSize(MAX_FILE_SIZE)} per project
-                        </span>
-                    </li>
-                    <li className="flex items-start">
-                        <span className="text-primary-400 mr-3 mt-1">•</span>
-                        <span>Handles up to 50,000 files and 800MB extracted content</span>
-                    </li>
-                    <li className="flex items-start">
-                        <span className="text-primary-400 mr-3 mt-1">•</span>
-                        <span className="text-green-400">
-                            <strong>Perfect for:</strong> Full-stack apps, monorepos, enterprise projects with dependencies
-                        </span>
-                    </li>
-                    <li className="flex items-start">
-                        <span className="text-primary-400 mr-3 mt-1">•</span>
-                        <span className="text-blue-400">
-                            <strong>Security:</strong> Advanced zip bomb protection keeps your data safe
-                        </span>
-                    </li>
-                </ul>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    {quickStartExamples.map((example, index) => (
+                        <div key={index} className="bg-dark-700/50 rounded-lg p-4 border border-dark-600 hover:border-primary-500/30 transition-colors">
+                            <div className="text-2xl mb-2">{example.icon}</div>
+                            <h5 className="text-white font-semibold text-sm mb-2">{example.title}</h5>
+                            <p className="text-gray-400 text-xs font-mono bg-dark-800 p-2 rounded border border-dark-700">
+                                {example.command}
+                            </p>
+                        </div>
+                    ))}
+                </div>
+                
+                <div className="bg-primary-500/10 border border-primary-500/30 rounded-lg p-4">
+                    <h5 className="text-primary-300 font-semibold mb-2 flex items-center">
+                        <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                        </svg>
+                        Pro Tip
+                    </h5>
+                    <p className="text-primary-200 text-sm">
+                        <strong>Include everything:</strong> Make sure your ZIP contains package.json, source files, and configuration files for the most comprehensive analysis.
+                    </p>
+                </div>
+            </div>
+
+            {/* Features & Capabilities */}
+            <div className="mt-6 card p-8">
+                <h4 className="text-lg font-semibold text-white mb-6 flex items-center">
+                    <svg className="w-5 h-5 mr-3 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                    What We Analyze
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="flex items-start space-x-3">
+                        <div className="flex-shrink-0 w-6 h-6 bg-green-500/20 rounded-full flex items-center justify-center mt-0.5">
+                            <svg className="w-3 h-3 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h5 className="text-white font-semibold text-sm">Dependency Analysis</h5>
+                            <p className="text-gray-400 text-xs">Version mismatches, vulnerabilities, peer dependencies</p>
+                        </div>
+                    </div>
+                    <div className="flex items-start space-x-3">
+                        <div className="flex-shrink-0 w-6 h-6 bg-green-500/20 rounded-full flex items-center justify-center mt-0.5">
+                            <svg className="w-3 h-3 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h5 className="text-white font-semibold text-sm">Security Scanning</h5>
+                            <p className="text-gray-400 text-xs">Hardcoded secrets, misconfigurations, vulnerable packages</p>
+                        </div>
+                    </div>
+                    <div className="flex items-start space-x-3">
+                        <div className="flex-shrink-0 w-6 h-6 bg-green-500/20 rounded-full flex items-center justify-center mt-0.5">
+                            <svg className="w-3 h-3 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h5 className="text-white font-semibold text-sm">Code Quality</h5>
+                            <p className="text-gray-400 text-xs">Project structure, TypeScript config, testing setup</p>
+                        </div>
+                    </div>
+                    <div className="flex items-start space-x-3">
+                        <div className="flex-shrink-0 w-6 h-6 bg-green-500/20 rounded-full flex items-center justify-center mt-0.5">
+                            <svg className="w-3 h-3 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h5 className="text-white font-semibold text-sm">AI-Powered Insights</h5>
+                            <p className="text-gray-400 text-xs">Gemini AI provides detailed solutions and prevention tips</p>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             {/* Security Features */}
             <div className="mt-6 p-6 bg-blue-500/10 border border-blue-500/30 rounded-xl">
-                <h5 className="text-blue-300 font-semibold mb-3 flex items-center">
+                <h5 className="text-blue-300 font-semibold mb-4 flex items-center">
                     <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
                     </svg>
-                    Security & Privacy
+                    Security & Privacy First
                 </h5>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-blue-200/80">
                     <div className="flex items-center space-x-2">
                         <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                         </svg>
-                        <span>Files are processed securely and deleted immediately</span>
+                        <span>Files processed securely & deleted immediately</span>
                     </div>
                     <div className="flex items-center space-x-2">
                         <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                         </svg>
-                        <span>Zip bomb protection prevents malicious uploads</span>
+                        <span>Advanced zip bomb protection</span>
                     </div>
                     <div className="flex items-center space-x-2">
                         <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                         </svg>
-                        <span>No data stored or shared with third parties</span>
+                        <span>No data stored or shared</span>
                     </div>
                     <div className="flex items-center space-x-2">
                         <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
