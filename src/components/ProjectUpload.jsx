@@ -7,8 +7,8 @@ const ProjectUpload = ({ onAnalysisComplete }) => {
     const [errorDetails, setErrorDetails] = useState('');
     const [uploadProgress, setUploadProgress] = useState(0);
 
-    // 🚀 MASSIVELY INCREASED FILE SIZE: 400MB
-    const MAX_FILE_SIZE = 400 * 1024 * 1024; // 400MB
+    // 🚀 MASSIVELY INCREASED FILE SIZE: 150MB
+    const MAX_FILE_SIZE = 150 * 1024 * 1024; // 150MB
 
     // Get backend URL from environment with fallbacks
     const getBackendUrl = () => {
