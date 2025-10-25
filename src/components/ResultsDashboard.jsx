@@ -5,7 +5,7 @@ const ResultsDashboard = ({ analysisResults, onReset, processingTime }) => {
     const [copiedCommand, setCopiedCommand] = useState(null);
     const [copiedSummary, setCopiedSummary] = useState(false);
 
-    // Add safe destructuring with defaults
+    // Enhanced safe destructuring with better defaults
     const { 
         health_score = 0, 
         issues = [], 
@@ -14,15 +14,44 @@ const ResultsDashboard = ({ analysisResults, onReset, processingTime }) => {
         llm_enhanced = false, 
         timestamp,
         performance = {},
-        llm_available = false
+        llm_available = false,
+        auto_cleaning = {},
+        error // Add error handling
     } = analysisResults || {};
 
-    // Compute priority breakdown if not provided
-    const computedPriorityBreakdown = summary.priority_breakdown || {
-        1: issues.filter(issue => issue.priority === 1 || issue.severity === 'high').length,
-        2: issues.filter(issue => issue.priority === 2 || issue.severity === 'medium').length,
-        3: issues.filter(issue => issue.priority === 3 || issue.severity === 'low').length
-    };
+    // DEBUG: Log the analysis results to see what's actually coming from backend
+    React.useEffect(() => {
+        console.log('🔍 Analysis Results from Backend:', analysisResults);
+        console.log('📋 Issues Array:', issues);
+        if (issues && issues.length > 0) {
+            console.log('🚨 First Issue Details:', issues[0]);
+        }
+    }, [analysisResults, issues]);
+
+    // FIXED: Better priority breakdown computation
+    const computedPriorityBreakdown = React.useMemo(() => {
+        if (summary?.priority_breakdown) {
+            return summary.priority_breakdown;
+        }
+        
+        // Handle both numeric and string-based priority systems
+        const breakdown = { high: 0, medium: 0, low: 0 };
+        
+        issues.forEach(issue => {
+            // Handle both severity and priority fields
+            const severity = issue.severity || (issue.priority === 1 ? 'high' : issue.priority === 2 ? 'medium' : 'low');
+            
+            if (severity === 'high' || issue.priority === 1) {
+                breakdown.high++;
+            } else if (severity === 'medium' || issue.priority === 2) {
+                breakdown.medium++;
+            } else {
+                breakdown.low++;
+            }
+        });
+        
+        return breakdown;
+    }, [issues, summary]);
 
     // Get processing time from performance data or props
     const totalProcessingTime = performance?.total_duration_seconds || processingTime || 0;
@@ -33,17 +62,41 @@ const ResultsDashboard = ({ analysisResults, onReset, processingTime }) => {
         return 'text-red-400';
     };
 
+    // FIXED: Improved priority badge handling
     const getPriorityBadge = (issue) => {
-        const priority = issue.priority || (issue.severity === 'high' ? 1 : issue.severity === 'medium' ? 2 : 3);
-        
+        // Determine priority from available fields
+        let priority;
+        if (issue.severity) {
+            priority = issue.severity; // 'high', 'medium', 'low'
+        } else if (issue.priority) {
+            priority = issue.priority === 1 ? 'high' : issue.priority === 2 ? 'medium' : 'low';
+        } else {
+            priority = 'medium'; // default
+        }
+
         const config = {
-            1: { label: 'Critical', class: 'bg-red-500/20 text-red-400 border-red-500/30' },
-            2: { label: 'Major', class: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' },
-            3: { label: 'Minor', class: 'bg-blue-500/20 text-blue-400 border-blue-500/30' }
+            high: { 
+                label: 'Critical', 
+                class: 'bg-red-500/20 text-red-400 border-red-500/30',
+                icon: '🚨'
+            },
+            medium: { 
+                label: 'Major', 
+                class: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+                icon: '⚠️'
+            },
+            low: { 
+                label: 'Minor', 
+                class: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+                icon: '💡'
+            }
         };
-        const { label, class: className } = config[priority] || config[2];
+        
+        const { label, class: className, icon } = config[priority] || config.medium;
+        
         return (
-            <span className={`px-3 py-1 text-sm font-medium border rounded-full ${className}`}>
+            <span className={`px-3 py-1 text-sm font-medium border rounded-full flex items-center gap-2 ${className}`}>
+                <span>{icon}</span>
                 {label}
             </span>
         );
@@ -93,9 +146,9 @@ const ResultsDashboard = ({ analysisResults, onReset, processingTime }) => {
         const summaryText = `
 🏥 Project Health Score: ${health_score}/100
 📊 Total Issues: ${issues.length}
-🚨 Critical: ${computedPriorityBreakdown[1]}
-⚠️ Major: ${computedPriorityBreakdown[2]}
-💡 Minor: ${computedPriorityBreakdown[3]}
+🚨 Critical: ${computedPriorityBreakdown.high}
+⚠️ Major: ${computedPriorityBreakdown.medium}
+💡 Minor: ${computedPriorityBreakdown.low}
 📁 Files Analyzed: ${project_stats?.total_files || 0}
 ⏱️ Processing Time: ${totalProcessingTime}s
 
@@ -108,22 +161,47 @@ Analyzed with CodeCopilot 🚀
     };
 
     const shareOnTwitter = () => {
-        const tweetText = `My project scored ${health_score}/100 on CodeCopilot! 🚀\n\nFound ${issues.length} issues with ${computedPriorityBreakdown[1]} critical ones.\n\n#CodeQuality #WebDev #CodeCopilot`;
+        const tweetText = `My project scored ${health_score}/100 on CodeCopilot! 🚀\n\nFound ${issues.length} issues with ${computedPriorityBreakdown.high} critical ones.\n\n#CodeQuality #WebDev #CodeCopilot`;
         const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}`;
         window.open(url, '_blank', 'width=550,height=420');
     };
 
-    // Get solution text - prioritize AI-enhanced solutions
+    // FIXED: Enhanced solution text handling
     const getSolutionText = (issue) => {
+        // Check all possible solution fields
         if (issue.llm_enhanced && issue.detailed_solution) {
             return issue.detailed_solution;
         }
-        return issue.solution || issue.fix || 'No solution provided.';
+        if (issue.solution) {
+            return issue.solution;
+        }
+        if (issue.fix) {
+            return issue.fix;
+        }
+        if (issue.recommendation) {
+            return issue.recommendation;
+        }
+        return 'No specific solution provided. Review the issue description for guidance.';
     };
 
-    // Check if solution is AI-generated
+    // FIXED: Better AI detection
     const isAISolution = (issue) => {
-        return issue.llm_enhanced || issue.ai_analyzed;
+        return issue.llm_enhanced || issue.ai_analyzed || issue.detailed_solution;
+    };
+
+    // FIXED: Get issue description with fallback
+    const getIssueDescription = (issue) => {
+        return issue.description || issue.message || issue.problem || issue.title;
+    };
+
+    // FIXED: Get issue category with fallback
+    const getIssueCategory = (issue) => {
+        return issue.category || issue.type || 'general';
+    };
+
+    // FIXED: Get issue file location
+    const getIssueLocation = (issue) => {
+        return issue.file || issue.file_path || issue.location || 'project-root';
     };
 
     // Get fun facts based on health score
@@ -163,12 +241,92 @@ Analyzed with CodeCopilot 🚀
         return insights.length > 0 ? insights : [`Analysis completed in ${totalProcessingTime}s`];
     };
 
+    // FIXED: Error display component
+    const renderErrorAlert = () => {
+        if (!analysisResults?.error && !error) return null;
+
+        const errorMessage = analysisResults?.error || error;
+        
+        return (
+            <div className="card p-6 bg-gradient-to-r from-red-500/10 to-orange-500/10 border border-red-500/30">
+                <div className="flex items-start space-x-3">
+                    <span className="text-2xl">🚨</span>
+                    <div className="flex-1">
+                        <h3 className="text-lg font-semibold text-red-400 mb-2">
+                            Analysis Issue Detected
+                        </h3>
+                        <p className="text-red-300 mb-3">
+                            {errorMessage}
+                        </p>
+                        <div className="bg-red-500/20 border border-red-500/30 rounded-lg p-3">
+                            <p className="text-red-200 text-sm">
+                                <strong>Note:</strong> Some issues may not be displayed correctly. 
+                                Check the browser console for detailed backend response.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    // FIXED: Auto-cleaning stats display
+    const renderAutoCleaningStats = () => {
+        if (!auto_cleaning && !project_stats?.auto_cleaning_stats) return null;
+
+        const cleaningStats = auto_cleaning || project_stats?.auto_cleaning_stats;
+        
+        if (!cleaningStats.success) return null;
+
+        return (
+            <div className="card p-6 bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/30">
+                <h3 className="text-lg font-semibold text-green-400 mb-4 flex items-center">
+                    <span className="mr-2">🧹</span>
+                    Automatic Cleaning Results
+                </h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                    <div>
+                        <div className="text-2xl font-bold text-green-400">
+                            {cleaningStats.original_size_mb || 0}MB
+                        </div>
+                        <div className="text-gray-400 text-sm">Original Size</div>
+                    </div>
+                    <div>
+                        <div className="text-2xl font-bold text-green-400">
+                            {cleaningStats.cleaned_size_mb || 0}MB
+                        </div>
+                        <div className="text-gray-400 text-sm">After Cleaning</div>
+                    </div>
+                    <div>
+                        <div className="text-2xl font-bold text-green-400">
+                            {cleaningStats.removed_mb || 0}MB
+                        </div>
+                        <div className="text-gray-400 text-sm">Reduced</div>
+                    </div>
+                    <div>
+                        <div className="text-2xl font-bold text-green-400">
+                            {cleaningStats.cleaned_files_count || 0}
+                        </div>
+                        <div className="text-gray-400 text-sm">Files Kept</div>
+                    </div>
+                </div>
+                {cleaningStats.cleaning_performance && (
+                    <div className="mt-3 text-center">
+                        <span className="text-green-300 text-sm">
+                            {cleaningStats.cleaning_performance}
+                        </span>
+                    </div>
+                )}
+            </div>
+        );
+    };
+
     // Tech stack display
     const renderTechStack = () => {
         if (!project_stats?.tech_stack) return null;
 
         const { tech_stack } = project_stats;
-        const hasTech = Object.values(tech_stack).some(stack => stack.length > 0);
+        const hasTech = Object.values(tech_stack).some(stack => stack && stack.length > 0);
 
         if (!hasTech) return null;
 
@@ -179,7 +337,7 @@ Analyzed with CodeCopilot 🚀
                     Technology Stack
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {tech_stack.frontend.length > 0 && (
+                    {tech_stack.frontend && tech_stack.frontend.length > 0 && (
                         <div>
                             <h4 className="font-semibold text-gray-300 mb-2">Frontend</h4>
                             <div className="flex flex-wrap gap-2">
@@ -191,7 +349,7 @@ Analyzed with CodeCopilot 🚀
                             </div>
                         </div>
                     )}
-                    {tech_stack.backend.length > 0 && (
+                    {tech_stack.backend && tech_stack.backend.length > 0 && (
                         <div>
                             <h4 className="font-semibold text-gray-300 mb-2">Backend</h4>
                             <div className="flex flex-wrap gap-2">
@@ -203,7 +361,7 @@ Analyzed with CodeCopilot 🚀
                             </div>
                         </div>
                     )}
-                    {tech_stack.build_tools.length > 0 && (
+                    {tech_stack.build_tools && tech_stack.build_tools.length > 0 && (
                         <div>
                             <h4 className="font-semibold text-gray-300 mb-2">Build Tools</h4>
                             <div className="flex flex-wrap gap-2">
@@ -215,7 +373,7 @@ Analyzed with CodeCopilot 🚀
                             </div>
                         </div>
                     )}
-                    {tech_stack.testing.length > 0 && (
+                    {tech_stack.testing && tech_stack.testing.length > 0 && (
                         <div>
                             <h4 className="font-semibold text-gray-300 mb-2">Testing</h4>
                             <div className="flex flex-wrap gap-2">
@@ -251,6 +409,7 @@ Analyzed with CodeCopilot 🚀
         );
     };
 
+
     return (
         <div className="space-y-8">
             {/* Header */}
@@ -272,6 +431,14 @@ Analyzed with CodeCopilot 🚀
                     Analyze New Project
                 </button>
             </div>
+
+            {/* Error Alert - Show if there are backend errors */}
+            {renderErrorAlert()}
+
+           
+
+            {/* Auto-cleaning Stats */}
+            {renderAutoCleaningStats()}
 
             {/* Performance & AI Status */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -398,7 +565,7 @@ Analyzed with CodeCopilot 🚀
                             </div>
                         )}
 
-                        {/* Issue Summary */}
+                        {/* Issue Summary - FIXED: Using string keys */}
                         <div className="flex flex-wrap gap-4 justify-center lg:justify-start">
                             <div className="text-center">
                                 <div className={`text-2xl font-bold ${issues.length === 0 ? 'text-green-400' : 'text-white'}`}>
@@ -407,20 +574,20 @@ Analyzed with CodeCopilot 🚀
                                 <div className="text-gray-400 text-sm">Total Issues</div>
                             </div>
                             <div className="text-center">
-                                <div className={`text-2xl font-bold ${computedPriorityBreakdown[1] === 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                    {computedPriorityBreakdown[1]}
+                                <div className={`text-2xl font-bold ${computedPriorityBreakdown.high === 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                    {computedPriorityBreakdown.high}
                                 </div>
                                 <div className="text-gray-400 text-sm">Critical</div>
                             </div>
                             <div className="text-center">
-                                <div className={`text-2xl font-bold ${computedPriorityBreakdown[2] === 0 ? 'text-green-400' : 'text-yellow-400'}`}>
-                                    {computedPriorityBreakdown[2]}
+                                <div className={`text-2xl font-bold ${computedPriorityBreakdown.medium === 0 ? 'text-green-400' : 'text-yellow-400'}`}>
+                                    {computedPriorityBreakdown.medium}
                                 </div>
                                 <div className="text-gray-400 text-sm">Major</div>
                             </div>
                             <div className="text-center">
-                                <div className={`text-2xl font-bold ${computedPriorityBreakdown[3] === 0 ? 'text-green-400' : 'text-blue-400'}`}>
-                                    {computedPriorityBreakdown[3]}
+                                <div className={`text-2xl font-bold ${computedPriorityBreakdown.low === 0 ? 'text-green-400' : 'text-blue-400'}`}>
+                                    {computedPriorityBreakdown.low}
                                 </div>
                                 <div className="text-gray-400 text-sm">Minor</div>
                             </div>
@@ -500,7 +667,22 @@ Analyzed with CodeCopilot 🚀
                                 <div className="flex flex-col sm:flex-row sm:items-start gap-4 mb-4">
                                     <div className="flex items-center gap-3 flex-1">
                                         {getPriorityBadge(issue)}
-                                        <h4 className="text-lg font-semibold text-white flex-1">{issue.title}</h4>
+                                        <div className="flex-1">
+                                            <h4 className="text-lg font-semibold text-white">{issue.title}</h4>
+                                            <div className="flex items-center space-x-2 mt-1">
+                                                <span className="text-gray-400 text-sm">
+                                                    Category: {getIssueCategory(issue)}
+                                                </span>
+                                                {issue.file && issue.file !== 'project-root' && (
+                                                    <span className="text-gray-500 text-sm">•</span>
+                                                )}
+                                                {getIssueLocation(issue) !== 'project-root' && (
+                                                    <span className="text-gray-400 text-sm">
+                                                        File: {getIssueLocation(issue)}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
                                     </div>
                                     <div className="flex items-center space-x-2">
                                         {isAISolution(issue) && (
@@ -527,20 +709,22 @@ Analyzed with CodeCopilot 🚀
                                             <h5 className="font-semibold text-red-400">Problem</h5>
                                         </div>
                                         <div className="bg-dark-800 rounded-lg p-4 border border-red-500/20">
-                                            <p className="text-gray-300 mb-2">{issue.description}</p>
-                                            {issue.file && issue.file !== 'project-root' && (
+                                            <p className="text-gray-300 mb-2">{getIssueDescription(issue)}</p>
+                                            {getIssueLocation(issue) && getIssueLocation(issue) !== 'project-root' && (
                                                 <div className="text-sm text-gray-400 mt-3">
                                                     <strong className="text-gray-300">Location:</strong>{' '}
-                                                    <code className="bg-dark-900 px-2 py-1 rounded text-red-300">{issue.file}</code>
+                                                    <code className="bg-dark-900 px-2 py-1 rounded text-red-300 font-mono">
+                                                        {getIssueLocation(issue)}
+                                                    </code>
                                                 </div>
                                             )}
                                         </div>
                                     </div>
 
-                                    {/* AI-Enhanced Sections - FIXED: This was the missing section! */}
+                                    {/* AI-Enhanced Sections */}
                                     {isAISolution(issue) && (
                                         <>
-                                            {/* Root Cause - Show only if we have AI content */}
+                                            {/* Root Cause */}
                                             {(issue.root_cause || issue.llm_enhanced) && (
                                                 <div className="space-y-3">
                                                     <div className="flex items-center space-x-2">
